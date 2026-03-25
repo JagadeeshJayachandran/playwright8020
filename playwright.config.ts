@@ -1,85 +1,66 @@
+// =============================================================================
+// THE COMMAND CENTER: playwright.config.ts
+//
+// This is the single source of truth for your entire test suite.
+// Key concepts for this video:
+//   1. baseURL  — set once here, used everywhere with page.goto('/path')
+//   2. 'setup' project  — runs auth.setup.ts ONCE to log in and save the session
+//   3. 'chromium' project — depends on 'setup', and reuses the saved session
+//      via storageState so every test starts already authenticated.
+// =============================================================================
+
 import { defineConfig, devices } from '@playwright/test';
 
-/**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-// import dotenv from 'dotenv';
-// import path from 'path';
-// dotenv.config({ path: path.resolve(__dirname, '.env') });
+// The path where the authenticated session (cookies + localStorage) is saved.
+// Defined here so both the setup script and the chromium project share it.
+const authFile = '.auth/user.json';
 
-/**
- * See https://playwright.dev/docs/test-configuration.
- */
 export default defineConfig({
   testDir: './tests',
-  /* Run tests in files in parallel */
   fullyParallel: true,
-  /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
+  // Throttle to 1 worker: the OrangeHRM free demo site returns 429 Too Many
+  // Requests when tests run in parallel. A real app under your control would
+  // not have this constraint — remove this line and enjoy full parallelism.
+  workers: 1,
   reporter: 'html',
-  /* Shared settings for allhead the projects below. See https://playwright.dev/docs/api/class-testoptions. */
+
   use: {
-    /* Base URL to use in actions like `await page.goto('')`. */
-    // baseURL: 'http://localhost:3000',
+    // --- THE KEY CHANGE ---
+    // Set the base URL once here. Now every page.goto('/some/path') in every
+    // test will automatically prepend this, eliminating hardcoded URLs.
+    baseURL: 'https://opensource-demo.orangehrmlive.com',
 
-    /* Collect trace for failed tests so it can be downloaded and viewed with `npx playwright show-trace`. */
     trace: 'retain-on-failure',
-
-    /* Output artifacts (traces/screenshots) to a known folder so CI can upload them. */
-    outputDir: 'test-results/',
-
-    /* Run tests headless by default. Set HEADLESS=false to run headed. */
     headless: process.env.HEADLESS !== 'false',
   },
 
-  /* Configure projects for major browsers */
+  outputDir: 'test-results/',
+
   projects: [
+    // --- PROJECT 1: THE SETUP ---
+    // This project runs first. Its only job is to log in once and save
+    // the browser's session state (cookies, localStorage) to a file.
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+
+    // --- PROJECT 2: THE REAL TESTS ---
+    // This project runs after 'setup' finishes (via dependencies).
+    // It loads the saved session from disk, so every test starts
+    // already logged in — without touching the login page at all.
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Load the saved auth session before each test
+        storageState: authFile,
+      },
+      // Don't start until the 'setup' project has completed
+      dependencies: ['setup'],
     },
-
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
   ],
-
-  /* Run your local dev server before starting the tests */
-  // webServer: {
-  //   command: 'npm run start',
-  //   url: 'http://localhost:3000',
-  //   reuseExistingServer: !process.env.CI,
-  // },
 });
+

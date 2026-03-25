@@ -6,3 +6,5 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+# Auth state saved by auth.setup.ts — contains session tokens, never commit
+/.auth/
